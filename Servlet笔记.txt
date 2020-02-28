@@ -1,0 +1,111 @@
+Servlet学习笔记
+1、service方法可以同时处理doGet和doPost方法
+2、输出文本消息：使用PrintWriter pw = resp.getWriter()来获取服务器响应端的输出
+    注意：
+		getWriter()默认的字符编码是ISO8859-1
+		charset必须为小写，否则不起作用。
+        使用resp类的getWriter方法获取PW对象之前，需要先使用setContentType方法设置ContentType字段值，否则set方法不起作用。
+        resp类的addHeader和setHeader方法来设置响应头，可以在getWriter方法后调用。
+        如果调用getWriter方法之前没有使用setContentType方法设置响应消息的字符编码则会导致乱码。
+    例：
+        resp.setHeader("head1", "value1");
+        resp.setContentType("text/html;charset=UTF-8");
+        PrintWriter out = resp.getWriter();
+        //resp.setHeader("Content-Type", "text/html;charset=UTF-8");  //虽然可以成功设置，但输出的依然是乱码
+3、输出字节流（图片、视频等）：使用ServletOutputStream类：
+    通过HttpServletResponse对象（resp）的getOutputStream方法获得ServeltOutputStream对象
+    例：
+        resp.setContentType("image/jpeg");
+        OutputStream outStream = resp.getOutputStream();
+        bype[] buffer = new bype[8192]; //每次从文件输入流中读取8KB
+        String filePath = req.getParameter("name"); //获取图像路径
+        FileInputStream fileStream = new FileInputStream(filePath);
+        int count = 0;
+        while(true){
+            count = fileStream.read(buffer);    将字节读取到缓冲区
+            if(count <= 0)break;
+            outStream.write(buffer, 0, count);
+        }
+        fileStream.close();
+    注意：
+        显示图像时，必须将Content-Type设为image/jpeg等，否则浏览器会将其当成普通的字节流来处理。
+        使用了请求参数name来获得客户端图像的绝对路径，也可以使用相对路径，但要使用ServletContent接口的getRealPath方法将相对路径转换成绝对路径
+        getWriter和getOutputStream方法不能同时使用，否则会抛出异常。
+4、Servlet与jsp通信：
+    （1）：在Servlet中使用req.getParameter("对象名")来获取jsp传过来的对象
+    （2）：使用Session，并且Session可以用于Servlet与jsp的各种组合通信，（如jsp与servlet，servlet与servlet，jsp与jsp）
+5、资源重用：
+    将一些代码包含到要调用的servlet中
+    有RequestDispatcher.include方法可供使用。使用时可以先通过getServletContext方法获取ServletContext对象，然后通过servletContext.getRequestDispatcher方法来获取RequestDispatcher对象
+    例：
+        假设有servlet1与html1供调用，servlet1输出Hello，html1输出world：
+        RequestDispatcher rd = this.getServletContext().getRequestDispatcher("/servlet/servlet1");
+        rd.include(req, resp);  //包含servlet1
+        rd.getServletContext().getRequestDispatcher("/chapter4/html1");
+        rd.include(req, resp);  //包含html1
+    这时，调用这个servlet，就会把servlet1和html1的内容也输出出来。
+    注意：url和Content-Type都是第一个的，也就是这个servlet的。在servlet1和html1中设定的都不会生效。
+6、转发web资源：
+    通过RequestDispatcher类的forward方法可以转发web资源，使用方法根include类似，但：
+    注意：
+        调用forward之前，输出缓冲区中的数据会被清空。也就是说，使用forward方法进行请求转发时，只可能输出被转发的web资源中的消息
+        如果在调用forward方法之前，已经将缓冲区中的数据发送到客户端。在调用forward方法时会抛出IllegalStateException异常，
+            这个异常消息会在Tomcat控制台或是在IDE的终端窗口中显示。而在IE中仍然会输出已经发送过来的消息。
+        在调用者和被调用者中设置响应消息头都不会被忽略，而调用include方法时，只有在调用者中设置响应消息头才会生效。
+		Servlet引擎会根据RequestDispatcher对象所包含的资源对Request对象中的请求路径和参数消息进行调整，而使用include方法时Servlet引擎不会调整。
+		forward方法只能使用一次，否则会抛出IllegalStateException异常。而include方法可以多次使用。
+	例：
+		RequestDispatcher rd = getServletContext().getRequestDispatcher("/servlet/servlet1");
+		rd.forward(req, resp);	//转发到servlet1
+	通过访问这个servlet，可以得到servlet1的输出。
+	请求路径改变为servlet1的
+7、设置状态响应码
+	状态响应码位于返回消息的第一行（状态行）：HTTP/1.1 200 OK 分别为HTTP版本、状态响应码、状态消息
+	（1）void setStatus(int sc);//设置响应成功时的状态响应码，如果不成功且客户端希望返回错误页面，则应当使用sendError方法。
+	（2）void sendRedirect(String location) throws IOException;//可以将当前的servlet重定向到其他的URL上
+	（3）
+	（3）void sendError(int sc, String msg);//返回一个错误界面，默认创建一个resp消息，将格式设置为“text/html”，但不修改cookie和头信息。当web应用中有同状态码的返回信息时，默认使用msg
+8、设置响应头
+	响应头由key和value组成，中间使用:分隔，可以用来设置字符集，设置正文类型
+	（1）void setHeader(String name, String value);
+	（2）void addHeader(String name, String value);
+	//两个都会向头中添加一行，不过set会覆盖原有值，add则添加一个同名字段（HTTP响应允许同名，且不区分大小写）
+	//还为整型和日期型专门添加了setIntHeader(String name, int value),setDateHeader(String name, long date)等四个方法。
+9、查看响应头是否包含
+	boolean containsHeader(String name);
+	//用来检查响应消息中是否存在某字段，存在返回true
+10、设置正文类型
+	void setContentType("image/jpeg");//（继承自javax.servlet.ServletResponse）
+	//设置响应正文的MIME类型，也就是“text/html”，可以用charset再设置下正文字符集
+	void setCharacterEncoding(String charset);
+	//设置正文的字符集，会覆盖原有字符集，可以多次设置，但要在getWriter之前设置才有效
+	上面两个方法，就相当于：
+	setContentType("text/html; charset=UTF-8");//同时设置
+11、设置正文大小（字节为单位）
+	void setContentLength(int len);
+	//下载文件时会显示文件大小，这个值就是从Content-Length字段获取的。如果无法正确显示文件大小说明没有设置Content-length字段。
+	//一般不需要使用set方法设置Content-Length字段，因为Servlet引擎会根据向客户端实际输出的响应正文的大小自动设置这个值。
+12、添加cookie
+	void addCookie(Cookie cookie);
+	//可以多次调用来添加很多Cookie
+继承自javax.Servlet.ServletResponse的方法：（set方法一般也有对应的get方法）
+	void flushBuffer();//强制将缓冲区的内容输出到客户端且自动提交，这意味着将写入状态码和标题
+	void serBufferSize(int size);//设置缓冲区大小
+	void setLocale();//设置本地化编码（如果没有手动设置编码， 且未执行未提交
+	boolean isCommitted();//是否提交
+	void resetBuffer();//清除缓冲区，但不清除标题或状态代码，如果响应已提交则会抛出IllegalStateException
+二、req方法
+	String getAuthType();//查看身份验证方案（方案被存储为静态对象：BASIC_AUTH, FORM_AUTH, CLIENT_CERT_AUTH, DIGEST_AUTH,或是容器特定字符串，没有则返回null
+	Cookie[] getCookies();//返回客户端通过此请求发送的Cookie对象的数组，没有则返回null
+	String getHeader(String name);//返回name对应的值，多个同名返回第一个，没有返回null
+	Enumeration getHeaders(String name);//将头信息里所有字段为name的字段值返回为枚举变量，没有则返回空枚举，不允许访问则返回null
+	Enumeration getHeaderNames();//返回所有字段的枚举，没有则返回空枚举，不允许访问则返回null
+	String getMethod();//返回请求方法的名称（get，post，put）与CGI变量REQUEST_METHOD的值相同。
+	String getPathInfo();//返回客户端发送请求时与URL相关联的额外路径信息（信息在servlet路径之后，查询字符串之前，并以/开始，如FirstServlet在web.xml中映射为/FirstServlet/*，就可以用/FirstServlet/a,/FirstServlet/b访问FirstServlet，那么/a,/b就是额外路径。），没有则返回null
+	String getPathTranslated();//将额外路径信息转换为实际路径，与CGI变量path_translate的值相同。如果没有额外信息，或servlet容器由于任何原因（如从存档执行web应用时）无法将虚拟路径转换为实际路径，返回nullweb。容器不会解码此字符串。
+	String getContextPath();//返回请求上下文的请求URL部分的字符串，在请求URL中，上下文路径总是首先出现，路径以/开始，但不以/结束。对于根目录上下文中的servlet，返回“”。web容器不会解码此字符串。
+	String getQueryString();//返回路径后面的请求URL（应该就是链接，但不包含表单）中包含的查询字符串，没有则返回null，与CGI变量QUERY_STRING的值相同。这个值不是由容器解码的。
+	String getRemoteUser();//返回发出此请求的用户登录名（如果用户已经经过身份验证）或null（未通过验证），用户名是否随后续请求一起发送取决于浏览器和身份验证的类型。与CGI变量REMOTE_USER的值相同。
+	
+	
+	
